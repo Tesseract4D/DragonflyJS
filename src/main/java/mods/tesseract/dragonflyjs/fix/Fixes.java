@@ -1,4 +1,4 @@
-package mods.tesseract.mymodid;
+package mods.tesseract.dragonflyjs.fix;
 
 import net.minecraft.client.Minecraft;
 import net.tclproject.mysteriumlib.asm.annotations.Fix;

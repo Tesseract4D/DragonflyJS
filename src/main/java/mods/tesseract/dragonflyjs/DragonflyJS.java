@@ -1,18 +1,15 @@
-package mods.tesseract.mymodid;
+package mods.tesseract.dragonflyjs;
 
 import cpw.mods.fml.common.Mod;
 import cpw.mods.fml.common.event.FMLPreInitializationEvent;
-import net.minecraft.client.Minecraft;
 import net.minecraftforge.common.config.Configuration;
 import net.tclproject.mysteriumlib.asm.common.CustomLoadingPlugin;
 import net.tclproject.mysteriumlib.asm.common.FirstClassTransformer;
-import net.tclproject.mysteriumlib.asm.core.MiscUtils;
-import org.lwjgl.opengl.Display;
 
 import java.io.File;
 
-@Mod(modid = "mymodid", acceptedMinecraftVersions = "[1.7.10]")
-public class MyMod extends CustomLoadingPlugin {
+@Mod(modid = "djs", acceptedMinecraftVersions = "[1.7.10]")
+public class DragonflyJS extends CustomLoadingPlugin {
     public static String greeting;
 
     @Mod.EventHandler
@@ -35,6 +32,6 @@ public class MyMod extends CustomLoadingPlugin {
 
     @Override
     public void registerFixes() {
-        registerClassWithFixes("mods.tesseract.mymodid.Fixes");
+        registerClassWithFixes("mods.tesseract.dragonflyjs.fix.Fixes");
     }
 }
