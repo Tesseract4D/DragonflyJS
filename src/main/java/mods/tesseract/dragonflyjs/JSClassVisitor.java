@@ -18,27 +18,27 @@ public class JSClassVisitor extends ClassVisitor {
     @Override
     public void visitEnd() {
         String desc = "(Lmods/tesseract/dragonflyjs/Test;I)V";
-        Type[] t = Type.getArgumentTypes(desc);
-        int n = t.length, m = n;
-        int[] r = new int[n];
+        StringBuilder desc2 = new StringBuilder("(");
+        Type[] types = Type.getArgumentTypes(desc);
+        int n = types.length, m = n;
+        int[] stores = new int[n];
         MethodVisitor mv = this.visitMethod(ACC_PUBLIC | ACC_STATIC, "b", desc, null, null);
         mv.visitCode();
         mv.visitLabel(new Label());
-        for (int i = 0; i < t.length; i++) {
-            Type p = t[i];
-            if (p.getSort() <= 8) {
-                insertLoad(mv, p, i);
-                mv.visitMethodInsn(Opcodes.INVOKESTATIC, "your/package/YourClass", "yourStaticMethod", "(I)V", false);
-                r[i] = ++m;
-                mv.visitVarInsn(ALOAD, m);
-            } else {
-                r[i] = i;
+        for (int i = 0; i < types.length; i++) {
+            if (types[i].getSort() <= 8) {
+                stores[i] = ++m;
+                insertLoad(mv, types[i], i);
+                mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;", false);
+                mv.visitVarInsn(ASTORE, m);
             }
+            desc2.append("Ljava/lang/Object;");
         }
-        for (int i = 0; i < t.length; i++) {
-            insertLoad(mv, t[i], r[i]);
-        }
-        mv.visitMethodInsn(Opcodes.INVOKESTATIC, "your/package/YourClass", "yourStaticMethod", "(Lmods/tesseract/dragonflyjs/Test;Ljava/lang/Object;)V", false);
+        desc2.append(")V");
+
+        mv.visitVarInsn(ALOAD, 0);
+        mv.visitVarInsn(ALOAD, 2);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC, "your/package/YourClass", "yourStaticMethod", desc2.toString(), false);
         insertPushDefaultReturnValue(mv, VOID_TYPE);
         insertReturn(mv, VOID_TYPE);
         mv.visitLabel(new Label());
