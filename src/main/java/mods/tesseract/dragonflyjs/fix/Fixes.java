@@ -1,8 +1,6 @@
 package mods.tesseract.dragonflyjs.fix;
 
 import mods.tesseract.dragonflyjs.DragonflyJS;
-import mods.tesseract.dragonflyjs.Test;
-import net.minecraft.client.Minecraft;
 import net.tclproject.mysteriumlib.asm.annotations.EnumReturnSetting;
 import net.tclproject.mysteriumlib.asm.annotations.Fix;
 import net.tclproject.mysteriumlib.asm.annotations.ReturnedValue;
@@ -17,8 +15,8 @@ public class Fixes {
         return z;
     }
 
-    @Fix(targetClass = "net.minecraft.client.Minecraft", insertOnInvoke = "org/lwjgl/opengl/Display;setTitle(Ljava/lang/String;)V")
-    public static void startGame(Object c) {
-        Display.setTitle("Custom Title");
-    }
+    //@Fix(targetClass = "net.minecraft.client.Minecraft", insertOnInvoke = "org/lwjgl/opengl/Display;setTitle(Ljava/lang/String;)V")
+    //public static void startGame(Object c) {
+    //    Display.setTitle("Custom Title");
+    //}
 }
