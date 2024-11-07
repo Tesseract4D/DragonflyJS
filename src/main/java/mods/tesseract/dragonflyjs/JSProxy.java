@@ -3,10 +3,9 @@ package mods.tesseract.dragonflyjs;
 import jdk.nashorn.api.scripting.ScriptObjectMirror;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 
 public class JSProxy {
-    public static ArrayList< ScriptObjectMirror> cachedFunctions = new ArrayList<>();
+    public static ArrayList<ScriptObjectMirror> cachedFunctions = new ArrayList<>();
 
     public static Object invokeJSAll(int method, Object... a) {
         return cachedFunctions.get(method).call(null, a);

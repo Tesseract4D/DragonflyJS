@@ -47,7 +47,7 @@ public class WrapperClassVisitor {
         StringBuilder desc2 = new StringBuilder("(I");
         Type[] types = Type.getArgumentTypes(desc);
         Type rt = Type.getReturnType(desc);
-        int n = types.length, m = n - 1;
+        int n = types.length, m = n - 1, d = 0;
         int[] stores = new int[n];
         MethodVisitor mv = cw.visitMethod(ACC_PUBLIC | ACC_STATIC, name, desc, null, null);
         mv.visitCode();
@@ -55,9 +55,11 @@ public class WrapperClassVisitor {
             Type type = types[i];
             if (type.getSort() <= 8) {
                 stores[i] = ++m;
-                insertLoad(mv, type, i);
-                insertPrimitiveToObject(mv, type);
+                insertLoad(mv, type, i + d);
+                insertPrimitiveToObject(mv, type);   
                 mv.visitVarInsn(ASTORE, m);
+                if (type == DOUBLE_TYPE || type == LONG_TYPE)
+                    d++;
             } else {
                 stores[i] = i;
             }
@@ -74,7 +76,7 @@ public class WrapperClassVisitor {
             insertObjectToPrimitive(mv, rt);
         }
         insertReturn(mv, rt);
-        mv.visitMaxs(3, m + 1);
+        mv.visitMaxs(n + 3, m + 1);
         mv.visitEnd();
     }
 

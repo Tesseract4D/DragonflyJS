@@ -4,11 +4,16 @@ import cpw.mods.fml.common.Mod;
 import cpw.mods.fml.common.event.FMLPreInitializationEvent;
 import jdk.nashorn.api.scripting.NashornScriptEngine;
 import jdk.nashorn.api.scripting.ScriptObjectMirror;
+import net.minecraft.block.Block;
 import net.minecraft.launchwrapper.Launch;
 import net.minecraft.launchwrapper.LaunchClassLoader;
+import net.minecraft.world.gen.MapGenCaves;
+import net.tclproject.mysteriumlib.asm.annotations.EnumReturnSetting;
+import net.tclproject.mysteriumlib.asm.annotations.FixOrder;
 import net.tclproject.mysteriumlib.asm.common.CustomLoadingPlugin;
-import net.tclproject.mysteriumlib.asm.common.FirstClassTransformer;
 import net.tclproject.mysteriumlib.asm.core.ASMFix;
+import net.tclproject.mysteriumlib.asm.core.FixInserterFactory;
+import net.tclproject.mysteriumlib.asm.core.MiscUtils;
 import org.objectweb.asm.Type;
 
 import javax.script.Invocable;
@@ -57,19 +62,13 @@ public class DragonflyJS extends CustomLoadingPlugin {
 
     @Mod.EventHandler
     public void preInit(FMLPreInitializationEvent e) throws NoSuchMethodException {
-        //System.out.println("&" + MiscUtils.getMemberInfo(MapGenCaves.class.getDeclaredMethod("isExceptionBiome", BiomeGenBase.class)));
-    }
-
-    @Override
-    public String[] getASMTransformerClass() {
-        return new String[]{FirstClassTransformer.class.getName()};
+        System.out.println("&" + MiscUtils.getMemberInfo(MapGenCaves.class.getDeclaredMethod("digBlock", Block[].class, int.class, int.class, int.class, int.class, int.class, int.class, boolean.class)));
     }
 
     @Override
     public void registerFixes() {
-        Object r;
         try {
-            r = DragonflyJS.instance.nashorn.eval("""
+            DragonflyJS.instance.nashorn.eval("""
                 var global=this;
                 function imp(s){
                  global[s.substring(s.lastIndexOf(".")+1)]=Java.type(s);
@@ -78,17 +77,25 @@ public class DragonflyJS extends CustomLoadingPlugin {
                 imp("java.lang.Thread");
                 imp("java.lang.Class");
                 imp("mods.tesseract.dragonflyjs.DragonflyJS");
+                imp("org.lwjgl.opengl.Display");
 
-                function jsmethod(){
-                 print("&");
-                 for each(var i in arguments)
-                  print(i);
+                function j(){
+                 print("aa");
                 }
                 function a(a){
-                 var s=Thread.currentThread().getStackTrace();
-                 return Class.forName(s[1].getClassName());
+                 print("&&");
+                 Display.setTitle("Custom Title");
+                 return true;
                 }
-                DragonflyJS.instance.registerJSFix(jsmethod,{"aa":"bb"});
+                DragonflyJS.registerJSFix(j,{
+                 "targetDesc":"(Lnet/minecraft/world/gen/MapGenCaves;[Lnet/minecraft/block/Block;IIIIIIZ)V",
+                 "targetMethod":"digBlock"
+                });
+                DragonflyJS.registerJSFix(a,{
+                 "targetDesc":"(Lnet/minecraft/client/Minecraft;JJDDZCIS)Z",
+                 "targetMethod":"startGame",
+                 "returnSetting":"ON_TRUE"
+                });
                 """);
         } catch (ScriptException e) {
             throw new RuntimeException(e);
@@ -104,26 +111,59 @@ public class DragonflyJS extends CustomLoadingPlugin {
         registerClassWithFixes("mods.tesseract.dragonflyjs.fix.Fixes");
     }
 
-    public void registerJSFix(ScriptObjectMirror fn, ScriptObjectMirror obj) {
+    public static void registerJSFix(ScriptObjectMirror fn, ScriptObjectMirror obj) {
         if (!fn.isFunction())
-            throw new IllegalArgumentException();
+            throw new IllegalArgumentException("参数" + fn + " 不是一个函数！");
+        if (!obj.getClassName().equals("Object"))
+            throw new IllegalArgumentException("参数" + obj + " 不是一个对象！");
         JSProxy.cachedFunctions.add(fn);
-        registerFix(createJSFix());
-    }
 
-    public static ASMFix createJSFix() {
-        String targetDesc = "(Lnet/minecraft/world/gen/MapGenCaves;Lnet/minecraft/world/biome/BiomeGenBase;)V", targetMethod = "isExceptionBiome";
+        ASMFix.Builder builder = ASMFix.newBuilder();
+        String[] keys = obj.getOwnKeys(true);
+        String targetDesc = "", targetMethod = "";
+        EnumReturnSetting setting = null;
+        String onInvoke = "";
+        int onLine = -2;
+
+        for (String key : keys) {
+            switch (key) {
+                case "targetDesc" -> targetDesc = (String) obj.get(key);
+                case "targetMethod" -> targetMethod = (String) obj.get(key);
+                case "returnSetting" -> setting = EnumReturnSetting.valueOf((String) obj.get(key));
+                case "order" -> builder.setPriority(FixOrder.valueOf((String) obj.get(key)));
+                case "createNewMethod" -> builder.setCreateMethod(Boolean.TRUE.equals(obj.get(key)));
+                case "isFatal" -> builder.setFatal(Boolean.TRUE.equals(obj.get(key)));
+                case "insertOnLine" -> onLine = (int) obj.get(key);
+                case "insertOnInvoke" -> onInvoke = (String) obj.get(key);
+                case "insertOnExit" -> {
+                    if (Boolean.TRUE.equals(obj.get(key)))
+                        builder.setInjectorFactory(ASMFix.ON_EXIT_FACTORY);
+                }
+            }
+        }
+
+        if (targetDesc.isEmpty())
+            throw new IllegalArgumentException("目标方法描述不能为空！");
+        if (targetMethod.isEmpty())
+            throw new IllegalArgumentException("目标方法名称不能为空！");
+        if (!onInvoke.isEmpty()) {
+            builder.setInjectorFactory(new FixInserterFactory.OnInvoke(onInvoke, onLine));
+        } else if (onLine >= 0) {
+            builder.setInjectorFactory(new FixInserterFactory.OnLineNumber(onLine));
+        }
+
         String fixMethod = "js$" + targetMethod + "$" + fixIndex++;
         Type[] types = Type.getArgumentTypes(targetDesc);
         if (types.length == 0)
             throw new IllegalArgumentException();
         WrapperClassVisitor.createMethod(fixMethod, targetDesc);
-        ASMFix.Builder builder = ASMFix.newBuilder();
 
         builder.setTargetClass(types[0].getClassName());
         builder.setTargetMethod(targetMethod);
         builder.setFixesClass("mods.tesseract.dragonflyjs.JSWrapper");
         builder.setFixMethod(fixMethod);
+        if (setting != null)
+            builder.setReturnSetting(setting);
 
         builder.addThisToFixMethodParameters();
         int currentParameterId = 1;
@@ -134,6 +174,6 @@ public class DragonflyJS extends CustomLoadingPlugin {
             currentParameterId += type == Type.LONG_TYPE || type == Type.DOUBLE_TYPE ? 2 : 1;
         }
 
-        return builder.build();
+        registerFix(builder.build());
     }
 }
