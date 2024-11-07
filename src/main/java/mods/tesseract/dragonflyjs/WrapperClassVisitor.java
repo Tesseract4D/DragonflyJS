@@ -1,11 +1,7 @@
 package mods.tesseract.dragonflyjs;
 
-import net.minecraft.launchwrapper.Launch;
-import org.apache.commons.io.FileUtils;
 import org.objectweb.asm.*;
 
-import java.io.File;
-import java.io.IOException;
 import java.util.ArrayList;
 
 import static org.objectweb.asm.Opcodes.*;
@@ -81,7 +77,7 @@ public class WrapperClassVisitor {
             insertObjectToPrimitive(mv, rt);
         }
         insertReturn(mv, rt);
-        mv.visitMaxs(3, m + 1);
+        mv.visitMaxs(n + d + 3, m + 1);
         mv.visitEnd();
     }
 

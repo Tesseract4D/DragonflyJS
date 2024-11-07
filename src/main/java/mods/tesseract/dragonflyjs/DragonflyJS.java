@@ -102,7 +102,7 @@ public class DragonflyJS extends CustomLoadingPlugin {
         ASMFix.Builder builder = ASMFix.newBuilder();
         String[] keys = obj.getOwnKeys(true);
         int onLine = -2;
-        boolean returnedValue = false;
+        boolean returnedValue = false, nullReturned = false;
         String targetDesc = "", targetMethod = "", onInvoke = "";
         EnumReturnSetting setting = null;
         Object constant = null;
@@ -127,7 +127,7 @@ public class DragonflyJS extends CustomLoadingPlugin {
                     if (Boolean.TRUE.equals(o))
                         builder.setInjectorFactory(ASMFix.ON_EXIT_FACTORY);
                 }
-                case "nullReturned" -> builder.setReturnType(EnumReturnType.NULL);
+                case "nullReturned" -> nullReturned = Boolean.TRUE.equals(o);
                 case "constantAlwaysReturned" -> constant = o;
             }
         }
@@ -142,7 +142,11 @@ public class DragonflyJS extends CustomLoadingPlugin {
             builder.setInjectorFactory(new FixInserterFactory.OnLineNumber(onLine));
         }
 
-        String fixMethod = "js$" + targetMethod + "$" + fixIndex++;
+        String fixMethod = "js$" + switch (targetMethod) {
+            case "<init>" -> "init";
+            case "<cinit>" -> "cinit";
+            default -> targetMethod;
+        } + "$" + fixIndex++;
         Type[] types = Type.getArgumentTypes(targetDesc);
         if (types.length == 0)
             throw new IllegalArgumentException();
@@ -153,6 +157,7 @@ public class DragonflyJS extends CustomLoadingPlugin {
         builder.setFixesClass("mods.tesseract.dragonflyjs.JSWrapper");
 
         builder.setFixMethod(fixMethod);
+
         if (setting != null)
             builder.setReturnSetting(setting);
 
@@ -160,6 +165,8 @@ public class DragonflyJS extends CustomLoadingPlugin {
             builder.setReturnType(EnumReturnType.PRIMITIVE_CONSTANT);
             builder.setPrimitiveAlwaysReturned(constant);
         }
+        if (nullReturned)
+            builder.setReturnType(EnumReturnType.NULL);
 
         builder.addThisToFixMethodParameters();
         int currentParameterId = 1;
