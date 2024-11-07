@@ -4,16 +4,15 @@ import cpw.mods.fml.common.Mod;
 import cpw.mods.fml.common.event.FMLPreInitializationEvent;
 import jdk.nashorn.api.scripting.NashornScriptEngine;
 import jdk.nashorn.api.scripting.ScriptObjectMirror;
-import net.minecraft.block.Block;
 import net.minecraft.launchwrapper.Launch;
 import net.minecraft.launchwrapper.LaunchClassLoader;
-import net.minecraft.world.gen.MapGenCaves;
+import net.minecraft.util.MathHelper;
 import net.tclproject.mysteriumlib.asm.annotations.EnumReturnSetting;
+import net.tclproject.mysteriumlib.asm.annotations.EnumReturnType;
 import net.tclproject.mysteriumlib.asm.annotations.FixOrder;
 import net.tclproject.mysteriumlib.asm.common.CustomLoadingPlugin;
 import net.tclproject.mysteriumlib.asm.core.ASMFix;
 import net.tclproject.mysteriumlib.asm.core.FixInserterFactory;
-import net.tclproject.mysteriumlib.asm.core.MiscUtils;
 import org.objectweb.asm.Type;
 
 import javax.script.Invocable;
@@ -56,15 +55,6 @@ public class DragonflyJS extends CustomLoadingPlugin {
         nashorn = (NashornScriptEngine) new ScriptEngineManager().getEngineByName("nashorn");
     }
 
-    public static Object invokeJS(String name, Object... args) throws ScriptException, NoSuchMethodException {
-        return ((Invocable) DragonflyJS.instance.nashorn).invokeFunction(name, args);
-    }
-
-    @Mod.EventHandler
-    public void preInit(FMLPreInitializationEvent e) throws NoSuchMethodException {
-        System.out.println("&" + MiscUtils.getMemberInfo(MapGenCaves.class.getDeclaredMethod("digBlock", Block[].class, int.class, int.class, int.class, int.class, int.class, int.class, boolean.class)));
-    }
-
     @Override
     public void registerFixes() {
         try {
@@ -75,26 +65,19 @@ public class DragonflyJS extends CustomLoadingPlugin {
                 }
 
                 imp("java.lang.Thread");
+                imp("java.lang.Float");
                 imp("java.lang.Class");
                 imp("mods.tesseract.dragonflyjs.DragonflyJS");
                 imp("org.lwjgl.opengl.Display");
 
-                function j(){
-                 print("aa");
+
+                function a(){
                 }
-                function a(a){
-                 print("&&");
-                 Display.setTitle("Custom Title");
-                 return true;
-                }
-                DragonflyJS.registerJSFix(j,{
-                 "targetDesc":"(Lnet/minecraft/world/gen/MapGenCaves;[Lnet/minecraft/block/Block;IIIIIIZ)V",
-                 "targetMethod":"digBlock"
-                });
+
                 DragonflyJS.registerJSFix(a,{
-                 "targetDesc":"(Lnet/minecraft/client/Minecraft;JJDDZCIS)Z",
-                 "targetMethod":"startGame",
-                 "returnSetting":"ON_TRUE"
+                 "targetDesc":"abs(Lnet/minecraft/util/MathHelper;F)Z",
+                 "returnSetting":"ON_TRUE",
+                 "constantAlwaysReturned":new Float(7777)
                 });
                 """);
         } catch (ScriptException e) {
@@ -108,7 +91,7 @@ public class DragonflyJS extends CustomLoadingPlugin {
             throw new RuntimeException(e);
         }
 
-        registerClassWithFixes("mods.tesseract.dragonflyjs.fix.Fixes");
+        registerClassWithFixes("mods.tesseract.dragonflyjs.fix.FixesDragonfly");
     }
 
     public static void registerJSFix(ScriptObjectMirror fn, ScriptObjectMirror obj) {
@@ -120,25 +103,34 @@ public class DragonflyJS extends CustomLoadingPlugin {
 
         ASMFix.Builder builder = ASMFix.newBuilder();
         String[] keys = obj.getOwnKeys(true);
-        String targetDesc = "", targetMethod = "";
-        EnumReturnSetting setting = null;
-        String onInvoke = "";
         int onLine = -2;
+        boolean returnedValue = false;
+        String targetDesc = "", targetMethod = "", onInvoke = "";
+        EnumReturnSetting setting = null;
+        Object constant = null;
 
         for (String key : keys) {
+            Object o = obj.get(key);
             switch (key) {
-                case "targetDesc" -> targetDesc = (String) obj.get(key);
-                case "targetMethod" -> targetMethod = (String) obj.get(key);
-                case "returnSetting" -> setting = EnumReturnSetting.valueOf((String) obj.get(key));
-                case "order" -> builder.setPriority(FixOrder.valueOf((String) obj.get(key)));
-                case "createNewMethod" -> builder.setCreateMethod(Boolean.TRUE.equals(obj.get(key)));
-                case "isFatal" -> builder.setFatal(Boolean.TRUE.equals(obj.get(key)));
-                case "insertOnLine" -> onLine = (int) obj.get(key);
-                case "insertOnInvoke" -> onInvoke = (String) obj.get(key);
+                case "targetDesc" -> {
+                    String s = (String) o;
+                    int i = s.indexOf('(');
+                    targetDesc = s.substring(i);
+                    targetMethod = s.substring(0, i);
+                }
+                case "returnSetting" -> setting = EnumReturnSetting.valueOf((String) o);
+                case "order" -> builder.setPriority(FixOrder.valueOf((String) o));
+                case "createNewMethod" -> builder.setCreateMethod(Boolean.TRUE.equals(o));
+                case "isFatal" -> builder.setFatal(Boolean.TRUE.equals(o));
+                case "returnedValue" -> returnedValue = Boolean.TRUE.equals(o);
+                case "insertOnLine" -> onLine = (int) o;
+                case "insertOnInvoke" -> onInvoke = (String) o;
                 case "insertOnExit" -> {
-                    if (Boolean.TRUE.equals(obj.get(key)))
+                    if (Boolean.TRUE.equals(o))
                         builder.setInjectorFactory(ASMFix.ON_EXIT_FACTORY);
                 }
+                case "nullReturned" -> builder.setReturnType(EnumReturnType.NULL);
+                case "constantAlwaysReturned" -> constant = o;
             }
         }
 
@@ -161,17 +153,28 @@ public class DragonflyJS extends CustomLoadingPlugin {
         builder.setTargetClass(types[0].getClassName());
         builder.setTargetMethod(targetMethod);
         builder.setFixesClass("mods.tesseract.dragonflyjs.JSWrapper");
+
         builder.setFixMethod(fixMethod);
         if (setting != null)
             builder.setReturnSetting(setting);
+
+        if (constant != null) {
+            builder.setReturnType(EnumReturnType.PRIMITIVE_CONSTANT);
+            builder.setPrimitiveAlwaysReturned(constant);
+        }
 
         builder.addThisToFixMethodParameters();
         int currentParameterId = 1;
         for (int i = 1; i < types.length; i++) {
             Type type = types[i];
-            builder.addTargetMethodParameters(type);
-            builder.addFixMethodParameter(type, currentParameterId);
-            currentParameterId += type == Type.LONG_TYPE || type == Type.DOUBLE_TYPE ? 2 : 1;
+            if (returnedValue && i == types.length - 1) {
+                builder.setTargetMethodReturnType(type);
+                builder.addReturnedValueToFixMethodParameters();
+            } else {
+                builder.addTargetMethodParameters(type);
+                builder.addFixMethodParameter(type, currentParameterId);
+                currentParameterId += type == Type.LONG_TYPE || type == Type.DOUBLE_TYPE ? 2 : 1;
+            }
         }
 
         registerFix(builder.build());

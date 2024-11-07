@@ -48,6 +48,9 @@ public class WrapperClassVisitor {
         Type[] types = Type.getArgumentTypes(desc);
         Type rt = Type.getReturnType(desc);
         int n = types.length, m = n - 1, d = 0;
+        for (Type t : types)
+            if (isLongOrDoubleType(t))
+                m++;
         int[] stores = new int[n];
         MethodVisitor mv = cw.visitMethod(ACC_PUBLIC | ACC_STATIC, name, desc, null, null);
         mv.visitCode();
@@ -56,9 +59,9 @@ public class WrapperClassVisitor {
             if (type.getSort() <= 8) {
                 stores[i] = ++m;
                 insertLoad(mv, type, i + d);
-                insertPrimitiveToObject(mv, type);   
+                insertPrimitiveToObject(mv, type);
                 mv.visitVarInsn(ASTORE, m);
-                if (type == DOUBLE_TYPE || type == LONG_TYPE)
+                if (isLongOrDoubleType(type))
                     d++;
             } else {
                 stores[i] = i;
@@ -76,8 +79,12 @@ public class WrapperClassVisitor {
             insertObjectToPrimitive(mv, rt);
         }
         insertReturn(mv, rt);
-        mv.visitMaxs(n + 3, m + 1);
+        mv.visitMaxs(3, m + 1);
         mv.visitEnd();
+    }
+
+    public static boolean isLongOrDoubleType(Type t) {
+        return t == DOUBLE_TYPE || t == LONG_TYPE;
     }
 
     public static void insertPrimitiveToObject(MethodVisitor mv, Type primitive) {
