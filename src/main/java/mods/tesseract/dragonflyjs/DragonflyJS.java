@@ -1,28 +1,32 @@
 package mods.tesseract.dragonflyjs;
 
 import cpw.mods.fml.common.Mod;
+import cpw.mods.fml.common.event.FMLInitializationEvent;
+import cpw.mods.fml.common.event.FMLPostInitializationEvent;
 import cpw.mods.fml.common.event.FMLPreInitializationEvent;
 import jdk.nashorn.api.scripting.NashornScriptEngine;
 import jdk.nashorn.api.scripting.ScriptObjectMirror;
 import net.minecraft.launchwrapper.Launch;
 import net.minecraft.launchwrapper.LaunchClassLoader;
-import net.minecraft.util.MathHelper;
 import net.tclproject.mysteriumlib.asm.annotations.EnumReturnSetting;
 import net.tclproject.mysteriumlib.asm.annotations.EnumReturnType;
 import net.tclproject.mysteriumlib.asm.annotations.FixOrder;
 import net.tclproject.mysteriumlib.asm.common.CustomLoadingPlugin;
 import net.tclproject.mysteriumlib.asm.core.ASMFix;
 import net.tclproject.mysteriumlib.asm.core.FixInserterFactory;
+import org.apache.commons.io.FileUtils;
 import org.objectweb.asm.Type;
 
-import javax.script.Invocable;
 import javax.script.ScriptEngineManager;
 import javax.script.ScriptException;
+import java.io.File;
+import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.security.CodeSource;
 import java.security.SecureClassLoader;
+import java.util.ArrayList;
 import java.util.Map;
 
 @Mod(modid = "djs")
@@ -34,6 +38,9 @@ public class DragonflyJS extends CustomLoadingPlugin {
     public static Field sobj;
     public static final String wrapperClass = "mods.tesseract.dragonflyjs.JSWrapper";
     public static int fixIndex = 0;
+    public static ArrayList<IFunction> preInitEvents = new ArrayList<>();
+    public static ArrayList<IFunction> initEvents = new ArrayList<>();
+    public static ArrayList<IFunction> postInitEvents = new ArrayList<>();
 
     static {
         try {
@@ -55,43 +62,34 @@ public class DragonflyJS extends CustomLoadingPlugin {
         nashorn = (NashornScriptEngine) new ScriptEngineManager().getEngineByName("nashorn");
     }
 
-    @Override
-    public void registerFixes() {
-        try {
-            DragonflyJS.instance.nashorn.eval("""
-                var global=this;
-                function imp(s){
-                 global[s.substring(s.lastIndexOf(".")+1)]=Java.type(s);
-                }
+    @Mod.EventHandler
+    public void preInit(FMLPreInitializationEvent e) {
+        for (IFunction f : preInitEvents)
+            f.invoke(e);
+    }
 
-                imp("java.lang.Thread");
-                imp("java.lang.Float");
-                imp("java.lang.Class");
-                imp("mods.tesseract.dragonflyjs.DragonflyJS");
-                imp("org.lwjgl.opengl.Display");
+    @Mod.EventHandler
+    public void init(FMLInitializationEvent e) {
+        for (IFunction f : initEvents)
+            f.invoke(e);
+    }
 
+    @Mod.EventHandler
+    public void postInit(FMLPostInitializationEvent e) {
+        for (IFunction f : postInitEvents)
+            f.invoke(e);
+    }
 
-                function a(){
-                }
+    public static void registerPreInitEvent(IFunction f) {
+        preInitEvents.add(f);
+    }
 
-                DragonflyJS.registerJSFix(a,{
-                 "targetDesc":"abs(Lnet/minecraft/util/MathHelper;F)Z",
-                 "returnSetting":"ON_TRUE",
-                 "constantAlwaysReturned":new Float(7777)
-                });
-                """);
-        } catch (ScriptException e) {
-            throw new RuntimeException(e);
-        }
+    public static void registerInitEvent(IFunction f) {
+        initEvents.add(f);
+    }
 
-        try {
-            byte[] data = WrapperClassVisitor.visit();
-            DragonflyJS.defineClass.invoke(Launch.classLoader, wrapperClass, data, 0, data.length, null);
-        } catch (IllegalAccessException | InvocationTargetException e) {
-            throw new RuntimeException(e);
-        }
-
-        registerClassWithFixes("mods.tesseract.dragonflyjs.fix.FixesDragonfly");
+    public static void registerPostInitEvent(IFunction f) {
+        postInitEvents.add(f);
     }
 
     public static void registerJSFix(ScriptObjectMirror fn, ScriptObjectMirror obj) {
@@ -178,5 +176,48 @@ public class DragonflyJS extends CustomLoadingPlugin {
         }
 
         registerFix(builder.build());
+    }
+
+    @Override
+    public void registerFixes() {
+        File scriptDir = new File(Launch.minecraftHome, "djs");
+        scriptDir.mkdir();
+        registerClassWithFixes("mods.tesseract.dragonflyjs.fix.FixesDragonfly");
+        try {
+            DragonflyJS.instance.nashorn.eval("""
+                var global=this;
+                function importClass(s){
+                 global[s.substring(s.lastIndexOf(".")+1)]=Java.type(s);
+                }
+                function registerEvent(c,b,e){
+                 (new c).getListenerList().register(b,Java.type("cpw.mods.fml.common.eventhandler.EventPriority").NORMAL,e);
+                }
+                function getSide(){
+                 return Java.type("cpw.mods.fml.common.FMLCommonHandler").instance().getSide();
+                }
+                importClass("mods.tesseract.dragonflyjs.DragonflyJS");
+                """);
+            File[] files = scriptDir.listFiles();
+            StringBuilder sb = new StringBuilder();
+            if (files != null)
+                for (File file : files) {
+                    if (file.isFile() && file.getName().endsWith(".js"))
+                        sb.append(FileUtils.readFileToString(file));
+                    if (sb.length() != 0)
+                        sb.append("\n");
+                }
+            if (sb.length() != 0) {
+                DragonflyJS.instance.nashorn.eval(sb.toString());
+            }
+        } catch (ScriptException | IOException e) {
+            throw new RuntimeException(e);
+        }
+
+        try {
+            byte[] data = WrapperClassVisitor.visit();
+            DragonflyJS.defineClass.invoke(Launch.classLoader, wrapperClass, data, 0, data.length, null);
+        } catch (IllegalAccessException | InvocationTargetException e) {
+            throw new RuntimeException(e);
+        }
     }
 }

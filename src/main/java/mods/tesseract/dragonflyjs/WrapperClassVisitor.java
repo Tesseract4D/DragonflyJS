@@ -30,11 +30,13 @@ public class WrapperClassVisitor {
             insertMethod(cw, methods.get(i), methods.get(i + 1), i / 2);
 
         cw.visitEnd();
+        /*
         try {
             FileUtils.writeByteArrayToFile(new File(Launch.minecraftHome, "JSWrapper.class"), cw.toByteArray());
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+        */
         return cw.toByteArray();
     }
 
