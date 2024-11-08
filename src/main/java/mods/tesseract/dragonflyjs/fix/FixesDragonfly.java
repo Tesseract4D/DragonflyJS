@@ -14,9 +14,4 @@ public class FixesDragonfly{
         DragonflyJS.cachedClasses.put(name, z);
         return z;
     }
-
-    @Fix(returnSetting = EnumReturnSetting.ALWAYS)
-    public static float abs(MathHelper c,float f){
-        return 0;
-    }
 }

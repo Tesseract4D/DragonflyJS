@@ -16,7 +16,7 @@ public class WrapperClassVisitor {
     private static final ArrayList<String> methods = new ArrayList<>();
 
     public static byte[] visit() {
-        ClassWriter cw = new ClassWriter(0);
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
         cw.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC, DragonflyJS.wrapperClass.replace('.', '/'), null, "java/lang/Object", null);
 
         MethodVisitor mv = cw.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "()V", null, null);
@@ -81,7 +81,7 @@ public class WrapperClassVisitor {
             insertObjectToPrimitive(mv, rt);
         }
         insertReturn(mv, rt);
-        mv.visitMaxs(n + d + 3, m + 1);
+        mv.visitMaxs(1, 1);
         mv.visitEnd();
     }
 

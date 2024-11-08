@@ -104,7 +104,8 @@ public class DragonflyJS extends CustomLoadingPlugin {
         int onLine = -2;
         boolean returnedValue = false, nullReturned = false;
         String targetDesc = "", targetMethod = "", onInvoke = "";
-        EnumReturnSetting setting = null;
+        Type targetClass = null, targetReturnType = null;
+        EnumReturnSetting setting = EnumReturnSetting.NEVER;
         Object constant = null;
 
         for (String key : keys) {
@@ -112,11 +113,15 @@ public class DragonflyJS extends CustomLoadingPlugin {
             switch (key) {
                 case "targetDesc" -> {
                     String s = (String) o;
-                    int i = s.indexOf('(');
-                    targetDesc = s.substring(i);
+                    int i = s.indexOf(';') + 1;
+                    targetClass = Type.getType(s.substring(0, i));
+                    s = s.substring(i);
+                    i = s.indexOf('(');
                     targetMethod = s.substring(0, i);
+                    targetDesc = s.substring(i);
                 }
                 case "returnSetting" -> setting = EnumReturnSetting.valueOf((String) o);
+                case "returnType" -> builder.setFixMethodReturnType(Type.getType((String) o));
                 case "order" -> builder.setPriority(FixOrder.valueOf((String) o));
                 case "createNewMethod" -> builder.setCreateMethod(Boolean.TRUE.equals(o));
                 case "isFatal" -> builder.setFatal(Boolean.TRUE.equals(o));
@@ -142,26 +147,29 @@ public class DragonflyJS extends CustomLoadingPlugin {
             builder.setInjectorFactory(new FixInserterFactory.OnLineNumber(onLine));
         }
 
+        StringBuilder fixDesc = new StringBuilder("(" + targetClass.getDescriptor());
+
         String fixMethod = "js$" + switch (targetMethod) {
             case "<init>" -> "init";
             case "<cinit>" -> "cinit";
             default -> targetMethod;
         } + "$" + fixIndex++;
-        Type[] types = Type.getArgumentTypes(targetDesc);
-        if (types.length == 0)
-            throw new IllegalArgumentException();
-        WrapperClassVisitor.createMethod(fixMethod, targetDesc);
 
-        builder.setTargetClass(types[0].getClassName());
+        targetReturnType = Type.getReturnType(targetDesc);
+        Type[] types = Type.getArgumentTypes(targetDesc);
+        for (Type type : types)
+            fixDesc.append(type.getDescriptor());
+
+        builder.setTargetClass(targetClass.getClassName());
         builder.setTargetMethod(targetMethod);
-        builder.setTargetMethodReturnType(Type.getReturnType(targetDesc));
+        builder.setTargetMethodReturnType(targetReturnType);
 
         builder.setFixesClass("mods.tesseract.dragonflyjs.JSWrapper");
         builder.setFixMethod(fixMethod);
 
         builder.addThisToFixMethodParameters();
         int currentParameterId = 1;
-        for (int i = 1; i < types.length; i++) {
+        for (int i = 0; i < types.length; i++) {
             Type type = types[i];
             if (returnedValue && i == types.length - 1) {
                 builder.setTargetMethodReturnType(type);
@@ -173,20 +181,23 @@ public class DragonflyJS extends CustomLoadingPlugin {
             }
         }
 
-        if (setting != null)
+        if (setting != EnumReturnSetting.NEVER) {
             builder.setReturnSetting(setting);
-        builder.setReturnType(EnumReturnType.FIX_METHOD_RETURN_VALUE);
-
-        if (constant != null) {
-            builder.setReturnType(EnumReturnType.PRIMITIVE_CONSTANT);
-            builder.setPrimitiveAlwaysReturned(constant);
+            if (constant != null) {
+                builder.setReturnType(EnumReturnType.PRIMITIVE_CONSTANT);
+                builder.setPrimitiveAlwaysReturned(constant);
+            } else if (nullReturned)
+                builder.setReturnType(EnumReturnType.NULL);
+            else if (setting == EnumReturnSetting.ALWAYS) {
+                builder.setFixMethodReturnType(targetReturnType);
+                builder.setReturnType(EnumReturnType.FIX_METHOD_RETURN_VALUE);
+            }
         }
 
-        if (nullReturned)
-            builder.setReturnType(EnumReturnType.NULL);
-        System.out.println("&"+builder.fixMethodReturnType);
-
-        registerFix(builder.build());
+        ASMFix fix = builder.build();
+        fixDesc.append(")").append(fix.fixMethodReturnType.getDescriptor());
+        WrapperClassVisitor.createMethod(fixMethod, fixDesc.toString());
+        registerFix(fix);
     }
 
     @Override
