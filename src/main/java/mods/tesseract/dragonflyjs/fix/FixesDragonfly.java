@@ -1,6 +1,7 @@
 package mods.tesseract.dragonflyjs.fix;
 
 import mods.tesseract.dragonflyjs.DragonflyJS;
+import net.minecraft.util.MathHelper;
 import net.tclproject.mysteriumlib.asm.annotations.EnumReturnSetting;
 import net.tclproject.mysteriumlib.asm.annotations.Fix;
 import net.tclproject.mysteriumlib.asm.annotations.ReturnedValue;
@@ -12,5 +13,10 @@ public class FixesDragonfly{
     public static Class<?> installClass(Object c, String name, byte[] data, CodeSource cs, @ReturnedValue Class<?> z) {
         DragonflyJS.cachedClasses.put(name, z);
         return z;
+    }
+
+    @Fix(returnSetting = EnumReturnSetting.ALWAYS)
+    public static float abs(MathHelper c,float f){
+        return 0;
     }
 }

@@ -154,19 +154,10 @@ public class DragonflyJS extends CustomLoadingPlugin {
 
         builder.setTargetClass(types[0].getClassName());
         builder.setTargetMethod(targetMethod);
+        builder.setTargetMethodReturnType(Type.getReturnType(targetDesc));
+
         builder.setFixesClass("mods.tesseract.dragonflyjs.JSWrapper");
-
         builder.setFixMethod(fixMethod);
-
-        if (setting != null)
-            builder.setReturnSetting(setting);
-
-        if (constant != null) {
-            builder.setReturnType(EnumReturnType.PRIMITIVE_CONSTANT);
-            builder.setPrimitiveAlwaysReturned(constant);
-        }
-        if (nullReturned)
-            builder.setReturnType(EnumReturnType.NULL);
 
         builder.addThisToFixMethodParameters();
         int currentParameterId = 1;
@@ -181,6 +172,19 @@ public class DragonflyJS extends CustomLoadingPlugin {
                 currentParameterId += type == Type.LONG_TYPE || type == Type.DOUBLE_TYPE ? 2 : 1;
             }
         }
+
+        if (setting != null)
+            builder.setReturnSetting(setting);
+        builder.setReturnType(EnumReturnType.FIX_METHOD_RETURN_VALUE);
+
+        if (constant != null) {
+            builder.setReturnType(EnumReturnType.PRIMITIVE_CONSTANT);
+            builder.setPrimitiveAlwaysReturned(constant);
+        }
+
+        if (nullReturned)
+            builder.setReturnType(EnumReturnType.NULL);
+        System.out.println("&"+builder.fixMethodReturnType);
 
         registerFix(builder.build());
     }

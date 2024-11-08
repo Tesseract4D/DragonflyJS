@@ -1,13 +1,18 @@
 package mods.tesseract.dragonflyjs;
 
+import net.minecraft.launchwrapper.Launch;
+import org.apache.commons.io.FileUtils;
 import org.objectweb.asm.*;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 
 import static org.objectweb.asm.Opcodes.*;
 import static org.objectweb.asm.Type.*;
 
 public class WrapperClassVisitor {
+    public static boolean dumpClass = true;
     private static final ArrayList<String> methods = new ArrayList<>();
 
     public static byte[] visit() {
@@ -26,13 +31,12 @@ public class WrapperClassVisitor {
             insertMethod(cw, methods.get(i), methods.get(i + 1), i / 2);
 
         cw.visitEnd();
-        /*
-        try {
-            FileUtils.writeByteArrayToFile(new File(Launch.minecraftHome, "JSWrapper.class"), cw.toByteArray());
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-        */
+        if (dumpClass)
+            try {
+                FileUtils.writeByteArrayToFile(new File(Launch.minecraftHome, "JSWrapper.class"), cw.toByteArray());
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
         return cw.toByteArray();
     }
 
