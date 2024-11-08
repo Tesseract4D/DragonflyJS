@@ -1,7 +1,6 @@
 package mods.tesseract.dragonflyjs.fix;
 
 import mods.tesseract.dragonflyjs.DragonflyJS;
-import net.minecraft.util.MathHelper;
 import net.tclproject.mysteriumlib.asm.annotations.EnumReturnSetting;
 import net.tclproject.mysteriumlib.asm.annotations.Fix;
 import net.tclproject.mysteriumlib.asm.annotations.ReturnedValue;

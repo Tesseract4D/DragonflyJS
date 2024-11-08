@@ -14,6 +14,7 @@ import net.tclproject.mysteriumlib.asm.annotations.FixOrder;
 import net.tclproject.mysteriumlib.asm.common.CustomLoadingPlugin;
 import net.tclproject.mysteriumlib.asm.core.ASMFix;
 import net.tclproject.mysteriumlib.asm.core.FixInserterFactory;
+import net.tclproject.mysteriumlib.asm.core.MiscUtils;
 import org.apache.commons.io.FileUtils;
 import org.objectweb.asm.Type;
 
@@ -92,6 +93,13 @@ public class DragonflyJS extends CustomLoadingPlugin {
         postInitEvents.add(f);
     }
 
+    public static void dumpMethodDescriptors(Class<?> c) {
+        Method[] methods = c.getDeclaredMethods();
+        for (Method method : methods) {
+            System.out.println(MiscUtils.getMemberInfo(method));
+        }
+    }
+
     public static void registerJSFix(ScriptObjectMirror fn, ScriptObjectMirror obj) {
         if (!fn.isFunction())
             throw new IllegalArgumentException("参数" + fn + " 不是一个函数！");
@@ -102,11 +110,10 @@ public class DragonflyJS extends CustomLoadingPlugin {
         ASMFix.Builder builder = ASMFix.newBuilder();
         String[] keys = obj.getOwnKeys(true);
         int onLine = -2;
-        boolean returnedValue = false, nullReturned = false;
+        boolean returnedValue = false, setting = false;
         String targetDesc = "", targetMethod = "", onInvoke = "";
-        Type targetClass = null, targetReturnType = null;
-        EnumReturnSetting setting = EnumReturnSetting.NEVER;
-        Object constant = null;
+        Type targetClass = null;
+        ScriptObjectMirror anotherMethodReturned = null;
 
         for (String key : keys) {
             Object o = obj.get(key);
@@ -120,20 +127,22 @@ public class DragonflyJS extends CustomLoadingPlugin {
                     targetMethod = s.substring(0, i);
                     targetDesc = s.substring(i);
                 }
-                case "returnSetting" -> setting = EnumReturnSetting.valueOf((String) o);
-                case "returnType" -> builder.setFixMethodReturnType(Type.getType((String) o));
+                case "alwaysReturn" -> setting = Boolean.TRUE.equals(o);
                 case "order" -> builder.setPriority(FixOrder.valueOf((String) o));
                 case "createNewMethod" -> builder.setCreateMethod(Boolean.TRUE.equals(o));
                 case "isFatal" -> builder.setFatal(Boolean.TRUE.equals(o));
                 case "returnedValue" -> returnedValue = Boolean.TRUE.equals(o);
+                case "anotherMethodReturned" -> {
+                    anotherMethodReturned = (ScriptObjectMirror) o;
+                    if (!anotherMethodReturned.isFunction())
+                        throw new IllegalArgumentException("参数" + anotherMethodReturned + " 不是一个函数！");
+                }
                 case "insertOnLine" -> onLine = (int) o;
                 case "insertOnInvoke" -> onInvoke = (String) o;
                 case "insertOnExit" -> {
                     if (Boolean.TRUE.equals(o))
                         builder.setInjectorFactory(ASMFix.ON_EXIT_FACTORY);
                 }
-                case "nullReturned" -> nullReturned = Boolean.TRUE.equals(o);
-                case "constantAlwaysReturned" -> constant = o;
             }
         }
 
@@ -153,9 +162,9 @@ public class DragonflyJS extends CustomLoadingPlugin {
             case "<init>" -> "init";
             case "<cinit>" -> "cinit";
             default -> targetMethod;
-        } + "$" + fixIndex++;
+        } + "$";
 
-        targetReturnType = Type.getReturnType(targetDesc);
+        Type targetReturnType = Type.getReturnType(targetDesc);
         Type[] types = Type.getArgumentTypes(targetDesc);
         for (Type type : types)
             fixDesc.append(type.getDescriptor());
@@ -165,38 +174,43 @@ public class DragonflyJS extends CustomLoadingPlugin {
         builder.setTargetMethodReturnType(targetReturnType);
 
         builder.setFixesClass("mods.tesseract.dragonflyjs.JSWrapper");
-        builder.setFixMethod(fixMethod);
+        builder.setFixMethod(fixMethod + fixIndex);
 
         builder.addThisToFixMethodParameters();
         int currentParameterId = 1;
         for (int i = 0; i < types.length; i++) {
             Type type = types[i];
-            if (returnedValue && i == types.length - 1) {
-                builder.setTargetMethodReturnType(type);
-                builder.addReturnedValueToFixMethodParameters();
-            } else {
                 builder.addTargetMethodParameters(type);
                 builder.addFixMethodParameter(type, currentParameterId);
                 currentParameterId += type == Type.LONG_TYPE || type == Type.DOUBLE_TYPE ? 2 : 1;
+            if (returnedValue && i == types.length - 1) {
+                fixDesc.append(targetReturnType.getDescriptor());
+                builder.addReturnedValueToFixMethodParameters();
             }
         }
 
-        if (setting != EnumReturnSetting.NEVER) {
-            builder.setReturnSetting(setting);
-            if (constant != null) {
-                builder.setReturnType(EnumReturnType.PRIMITIVE_CONSTANT);
-                builder.setPrimitiveAlwaysReturned(constant);
-            } else if (nullReturned)
-                builder.setReturnType(EnumReturnType.NULL);
-            else if (setting == EnumReturnSetting.ALWAYS) {
-                builder.setFixMethodReturnType(targetReturnType);
-                builder.setReturnType(EnumReturnType.FIX_METHOD_RETURN_VALUE);
-            }
+        if (setting) {
+            builder.setReturnSetting(EnumReturnSetting.ALWAYS);
+            builder.setFixMethodReturnType(targetReturnType);
+            builder.setReturnType(EnumReturnType.FIX_METHOD_RETURN_VALUE);
+        }
+
+        if (anotherMethodReturned != null) {
+            builder.setReturnSetting(EnumReturnSetting.ON_TRUE);
+            builder.setReturnType(net.tclproject.mysteriumlib.asm.annotations.EnumReturnType.ANOTHER_METHOD_RETURN_VALUE);
+            builder.setReturnMethod(fixMethod + (fixIndex + 1));
         }
 
         ASMFix fix = builder.build();
-        fixDesc.append(")").append(fix.fixMethodReturnType.getDescriptor());
-        WrapperClassVisitor.createMethod(fixMethod, fixDesc.toString());
+        fixDesc.append(")");
+        WrapperClassVisitor.createMethod(fixMethod + fixIndex++, fixDesc.toString() + fix.fixMethodReturnType.getDescriptor());
+
+        if (anotherMethodReturned != null) {
+            JSProxy.cachedFunctions.add(anotherMethodReturned);
+            String n = fixMethod + fixIndex++;
+            WrapperClassVisitor.createMethod(n, fixDesc.toString() + targetReturnType.getDescriptor());
+        }
+
         registerFix(fix);
     }
 
